@@ -116,7 +116,7 @@ def train(model_G, criterion_G, optimizer_G, model_D, criterion_D, optimizer_D,
         y_G_sub = None
         y_hat_vis = y_hat  # for visualization
 
-        # PQMF formatting
+        # PQMF formatting  正交镜像滤波器组的高维推广的近似解也就是 pseudo-QMF
         if y_hat.shape[1] > 1:
             y_hat_sub = y_hat
             y_hat = model_G.pqmf_synthesis(y_hat)
@@ -274,14 +274,14 @@ def train(model_G, criterion_G, optimizer_G, model_D, criterion_D, optimizer_D,
 
                 # compute spectrograms
                 figures = plot_results(y_hat_vis, y_G, ap, global_step,
-                                    'train')
+                                       'train')
                 tb_logger.tb_train_figures(global_step, figures)
 
                 # Sample audio
                 sample_voice = y_hat_vis[0].squeeze(0).detach().cpu().numpy()
                 tb_logger.tb_train_audios(global_step,
-                                        {'train/audio': sample_voice},
-                                        c.audio["sample_rate"])
+                                          {'train/audio': sample_voice},
+                                          c.audio["sample_rate"])
         end_time = time.time()
 
     # print epoch stats
@@ -298,7 +298,7 @@ def train(model_G, criterion_G, optimizer_G, model_D, criterion_D, optimizer_D,
     return keep_avg.avg_values, global_step
 
 
-@torch.no_grad()
+@torch.no_grad() #@torch.no_grad()中的数据不需要计算梯度,不会进行反向传播
 def evaluate(model_G, criterion_G, model_D, criterion_D, ap, global_step, epoch):
     data_loader = setup_loader(ap, is_val=True, verbose=(epoch == 0))
     model_G.eval()
@@ -325,11 +325,11 @@ def evaluate(model_G, criterion_G, model_D, criterion_D, ap, global_step, epoch)
         y_hat_sub = None
         y_G_sub = None
 
-        # PQMF formatting
-        if y_hat.shape[1] > 1:
+        # PQMF formatting 分析滤波器
+        if y_hat.shape[1] > 1: # shape[1]分解子带个数
             y_hat_sub = y_hat
-            y_hat = model_G.pqmf_synthesis(y_hat)
-            y_G_sub = model_G.pqmf_analysis(y_G)
+            y_hat = model_G.pqmf_synthesis(y_hat)  # 合成
+            y_G_sub = model_G.pqmf_analysis(y_G)  # 分解
 
         scores_fake, feats_fake, feats_real = None, None, None
         if global_step > c.steps_to_start_discriminator:
@@ -375,7 +375,7 @@ def evaluate(model_G, criterion_G, model_D, criterion_D, ap, global_step, epoch)
             with torch.no_grad():
                 y_hat = model_G(c_G)
 
-            # PQMF formatting
+            # PQMF formatting 合成滤波器
             if y_hat.shape[1] > 1:
                 y_hat = model_G.pqmf_synthesis(y_hat)
 
@@ -430,11 +430,11 @@ def evaluate(model_G, criterion_G, model_D, criterion_D, ap, global_step, epoch)
         # Sample audio
         sample_voice = y_hat[0].squeeze(0).detach().cpu().numpy()
         tb_logger.tb_eval_audios(global_step, {'eval/audio': sample_voice},
-                                c.audio["sample_rate"])
+                                 c.audio["sample_rate"])
 
         tb_logger.tb_eval_stats(global_step, keep_avg.avg_values)
 
-     # synthesize a full voice
+    # synthesize a full voice
     data_loader.return_segments = False
 
     return keep_avg.avg_values
@@ -470,7 +470,7 @@ def main(args):  # pylint: disable=redefined-outer-name
                            lr=c.lr_disc,
                            weight_decay=0)
 
-    # schedulers
+    # schedulers 学习率。，The learning rate of all models is halved every 100K steps until 1e−6
     scheduler_gen = None
     scheduler_disc = None
     if 'lr_scheduler_gen' in c:
@@ -639,7 +639,7 @@ if __name__ == '__main__':
         if args.restore_path:
             new_fields["restore_path"] = args.restore_path
         new_fields["github_branch"] = get_git_branch()
-        copy_model_files(c,  args.config_path,
+        copy_model_files(c, args.config_path,
                          OUT_PATH, new_fields)
         os.chmod(AUDIO_PATH, 0o775)
         os.chmod(OUT_PATH, 0o775)

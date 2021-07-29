@@ -12,6 +12,7 @@ class GANDataset(Dataset):
     GAN Dataset searchs for all the wav files under root path
     and converts them to acoustic features on the fly and returns
     random segments of (audio, feature) couples.
+    路径下所有wav文件，将其转换为声学特征，返回随机片段(音频，特征)对
     """
     def __init__(self,
                  ap,
@@ -29,18 +30,18 @@ class GANDataset(Dataset):
         self.ap = ap
         self.item_list = items
         self.compute_feat = not isinstance(items[0], (tuple, list))
-        self.seq_len = seq_len
-        self.hop_len = hop_len
-        self.pad_short = pad_short
-        self.conv_pad = conv_pad
+        self.seq_len = seq_len #16384
+        self.hop_len = hop_len #256
+        self.pad_short = pad_short #2000
+        self.conv_pad = conv_pad #0
         self.is_training = is_training
         self.return_segments = return_segments
         self.use_cache = use_cache
         self.use_noise_augment = use_noise_augment
         self.verbose = verbose
 
-        assert seq_len % hop_len == 0, " [!] seq_len has to be a multiple of hop_len."
-        self.feat_frame_len = seq_len // hop_len + (2 * conv_pad)
+        assert seq_len % hop_len == 0, " [!] seq_len has to be a multiple of hop_len." #Seq_len必须是hop_len的倍数
+        self.feat_frame_len = seq_len // hop_len + (2 * conv_pad) #16384//256+0 = 64
 
         # map G and D instances
         self.G_to_D_mappings = list(range(len(self.item_list)))
