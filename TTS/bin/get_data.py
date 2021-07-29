@@ -1,35 +1,16 @@
-import argparse
-import glob
-import os
-import sys
-import time
-import traceback
-from inspect import signature
-
-import torch
 from torch.utils.data import DataLoader
 from TTS.utils.audio import AudioProcessor
-from TTS.utils.console_logger import ConsoleLogger
-from TTS.utils.generic_utils import (KeepAverage, count_parameters,
-                                     create_experiment_folder, get_git_branch,
-                                     remove_experiment_folder, set_init_dict)
+
 from TTS.utils.io import copy_model_files, load_config
-from TTS.utils.radam import RAdam
-from TTS.utils.tensorboard_logger import TensorboardLogger
+\
 from TTS.utils.training import setup_torch_training_env
 from TTS.vocoder.datasets.gan_dataset import GANDataset
 from TTS.vocoder.datasets.preprocess import load_wav_data, load_wav_feat_data
-from TTS.vocoder.layers.losses import DiscriminatorLoss, GeneratorLoss
-from TTS.vocoder.utils.generic_utils import (plot_results, setup_discriminator,
-                                             setup_generator)
-from TTS.vocoder.utils.io import save_best_model, save_checkpoint
 
-# DISTRIBUTED
-from torch.nn.parallel import DistributedDataParallel as DDP_th
 from torch.utils.data.distributed import DistributedSampler
-from TTS.utils.distribute import init_distributed
 
-use_cuda, num_gpus = setup_torch_training_env(True, True)
+
+use_cuda, num_gpus = setup_torch_training_env(False, False)
 
 
 def setup_loader(ap, is_val=False, verbose=False):
