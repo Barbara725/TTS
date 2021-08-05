@@ -21,7 +21,7 @@ class MelganGenerator(nn.Module):
                 1) % 2 == 0, " [!] proj_kernel should be an odd number."
 
         # setup additional model parameters
-        base_padding = (proj_kernel - 1) // 2
+        base_padding = (proj_kernel - 1) // 2 # 3
         act_slope = 0.2
         self.inference_padding = 2
 
@@ -69,8 +69,8 @@ class MelganGenerator(nn.Module):
             nn.ReflectionPad1d(base_padding),
             weight_norm(
                 nn.Conv1d(layer_out_channels,
-                          out_channels,
-                          proj_kernel,
+                          out_channels, # 1
+                          proj_kernel, # 7
                           stride=1,
                           bias=True)),
             nn.Tanh()

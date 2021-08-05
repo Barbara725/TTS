@@ -4,7 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-class TorchSTFT(nn.Module):#计算短时傅里叶频谱
+class TorchSTFT(nn.Module):
     def __init__(self, n_fft, hop_length, win_length, window='hann_window'):
         """ Torch based STFT operation """
         super(TorchSTFT, self).__init__()
@@ -12,10 +12,10 @@ class TorchSTFT(nn.Module):#计算短时傅里叶频谱
         self.hop_length = hop_length
         self.win_length = win_length
         self.window = nn.Parameter(getattr(torch, window)(win_length),
-                                   requires_grad=False)# getattr() 函数用于返回一个对象属性值。
+                                   requires_grad=False)
 
-    def __call__(self, x):#函数调用。一个类实例要变成一个可调用对象，只需要实现一个特殊方法__call__()
-        # B x D x T x 2 计算频谱,batchsize*频率*帧数*2（实部+虚部）
+    def __call__(self, x):
+        # B x D x T x 2
         o = torch.stft(x,
                        self.n_fft,
                        self.hop_length,
@@ -26,9 +26,9 @@ class TorchSTFT(nn.Module):#计算短时傅里叶频谱
                        normalized=False,
                        onesided=True,
                        return_complex=False)
-        M = o[:, :, :, 0]#实部
-        P = o[:, :, :, 1]#虚部
-        return torch.sqrt(torch.clamp(M ** 2 + P ** 2, min=1e-8))# 求幅值。clamp 将输入input张量每个元素的夹紧到区间 [min,max]，并返回结果到一个新张量。
+        M = o[:, :, :, 0]
+        P = o[:, :, :, 1]
+        return torch.sqrt(torch.clamp(M ** 2 + P ** 2, min=1e-8))
 
 
 #################################
@@ -43,15 +43,15 @@ class STFTLoss(nn.Module):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.win_length = win_length
-        self.stft = TorchSTFT(n_fft, hop_length, win_length)#调用类
+        self.stft = TorchSTFT(n_fft, hop_length, win_length)
 
     def forward(self, y_hat, y):
-        y_hat_M = self.stft(y_hat)#预测值stft
-        y_M = self.stft(y)#目标值stft
+        y_hat_M = self.stft(y_hat)
+        y_M = self.stft(y)
         # log STFT magnitude loss
-        loss_mag = F.l1_loss(torch.log(y_M), torch.log(y_hat_M))# 1norm l1_loss取各元素的绝对值差的平均值
+        loss_mag = F.l1_loss(torch.log(y_M), torch.log(y_hat_M))
         # spectral convergence loss
-        loss_sc = torch.norm(y_M - y_hat_M, p="fro") / torch.norm(y_M, p="fro")#p='fro'时,Frobenius范数
+        loss_sc = torch.norm(y_M - y_hat_M, p="fro") / torch.norm(y_M, p="fro")
         return loss_mag, loss_sc
 
 class MultiScaleSTFTLoss(torch.nn.Module):
@@ -61,38 +61,37 @@ class MultiScaleSTFTLoss(torch.nn.Module):
                  hop_lengths=(120, 240, 50),
                  win_lengths=(600, 1200, 240)):
         super(MultiScaleSTFTLoss, self).__init__()
-        self.loss_funcs = torch.nn.ModuleList() #nn.ModuleList()储存不同 module，并自动将每个 module 的 parameters 添加到网络之中的容器。list
+        self.loss_funcs = torch.nn.ModuleList()
 
-        for n_fft, hop_length, win_length in zip(n_ffts, hop_lengths, win_lengths): #zip并行遍历
-            self.loss_funcs.append(STFTLoss(n_fft, hop_length, win_length))#loss_funcs得到三个已实例化的类STFTLoss
-
-    def forward(self, y_hat, y):#预测波形y_hat，目标波形y
-        N = len(self.loss_funcs) #N=3
+        for n_fft, hop_length, win_length in zip(n_ffts, hop_lengths, win_lengths):
+            self.loss_funcs.append(STFTLoss(n_fft, hop_length, win_length))
+    def forward(self, y_hat, y):
+        N = len(self.loss_funcs)
         loss_sc = 0
         loss_mag = 0
-        for f in self.loss_funcs:#循环每个类forward
-            lm, lsc = f(y_hat, y)#输入类的参数
+        for f in self.loss_funcs:
+            lm, lsc = f(y_hat, y)
             loss_mag += lm
             loss_sc += lsc
-        loss_sc /= N    #计算三组平均值
+        loss_sc /= N
         loss_mag /= N
-        return loss_mag, loss_sc #返回每组的mag对数幅度谱loss，sc谱收敛loss的平均值
+        return loss_mag, loss_sc
 
 
-class MultiScaleSubbandSTFTLoss(MultiScaleSTFTLoss):#计算每个子带的loss_mag, loss_sc
+class MultiScaleSubbandSTFTLoss(MultiScaleSTFTLoss):
     """ Multiscale STFT loss for multi band model outputs """
     # pylint: disable=no-self-use
-    def forward(self, y_hat, y): #shape[1]分解子带个数；shape[2]子带长度；shape[0]可能batchsize
+    def forward(self, y_hat, y):
         y_hat = y_hat.view(-1, 1, y_hat.shape[2])
-        y = y.view(-1, 1, y.shape[2])#view 按要求改变y的形状,-1自动计算，取每条子带
-        return super().forward(y_hat.squeeze(1), y.squeeze(1))#squeeze(1)代表若第二维度值为1则去除第二维度, super().forward调用父类前向方式;如（5，3，60）——>(15,1,60）——>(15,60)
+        y = y.view(-1, 1, y.shape[2])
+        return super().forward(y_hat.squeeze(1), y.squeeze(1))
 
 
 class MSEGLoss(nn.Module):
     """ Mean Squared Generator Loss """
-    # pylint: disable=no-self-use 生成器损失 '假' 数据的logits（即d_logits_fake），但所有的labels全设为1（即希望生成器generator输出1）。这样通过训练，生成器试图 ‘骗过’ discriminator。
+    # pylint: disable=no-self-use
     def forward(self, score_real):
-        loss_fake = F.mse_loss(score_real, score_real.new_ones(score_real.shape))#希望D输出1；target=1
+        loss_fake = F.mse_loss(score_real, score_real.new_ones(score_real.shape))
         return loss_fake
 
 
@@ -114,12 +113,11 @@ class MSEDLoss(nn.Module):
     """ Mean Squared Discriminator Loss """
     def __init__(self,):
         super(MSEDLoss, self).__init__()
-        self.loss_func = nn.MSELoss()#nn.MSELoss()里面还是调用F.mse_loss
-
-    # pylint: disable=no-self-use 判别器损失d_loss = d_loss_real + d_loss_fake
+        self.loss_func = nn.MSELoss()#
+    # pylint: disable=no-self-use
     def forward(self, score_fake, score_real):
-        loss_real = self.loss_func(score_real, score_real.new_ones(score_real.shape)) #判为real，target=1输入真频谱
-        loss_fake = self.loss_func(score_fake, score_fake.new_zeros(score_fake.shape))#假数据，target=0
+        loss_real = self.loss_func(score_real, score_real.new_ones(score_real.shape))
+        loss_fake = self.loss_func(score_fake, score_fake.new_zeros(score_fake.shape))
         loss_d = loss_real + loss_fake
         return loss_d, loss_real, loss_fake
 
@@ -134,7 +132,7 @@ class HingeDLoss(nn.Module):
         return loss_d, loss_real, loss_fake
 
 
-class MelganFeatureLoss(nn.Module):#特征匹配损失
+class MelganFeatureLoss(nn.Module):
     def __init__(self,):
         super(MelganFeatureLoss, self).__init__()
         self.loss_func = nn.L1Loss()
@@ -153,13 +151,13 @@ class MelganFeatureLoss(nn.Module):#特征匹配损失
 #####################################
 
 
-def _apply_G_adv_loss(scores_fake, loss_func): #G的对抗损失 G_adv_loss (loss_func:self.mse_loss/hinge_loss)
+def _apply_G_adv_loss(scores_fake, loss_func):
     """ Compute G adversarial loss function
     and normalize values """
     adv_loss = 0
-    if isinstance(scores_fake, list):#判断类型是否为list
+    if isinstance(scores_fake, list):
         for score_fake in scores_fake:
-            fake_loss = loss_func(score_fake)  #?
+            fake_loss = loss_func(score_fake)
             adv_loss += fake_loss
         adv_loss /= len(scores_fake)
     else:
@@ -168,7 +166,7 @@ def _apply_G_adv_loss(scores_fake, loss_func): #G的对抗损失 G_adv_loss (los
     return adv_loss
 
 
-def _apply_D_loss(scores_fake, scores_real, loss_func):# D_loss,real,fake
+def _apply_D_loss(scores_fake, scores_real, loss_func):
     """ Compute D loss func and normalize loss values """
     loss = 0
     real_loss = 0
@@ -227,31 +225,30 @@ class GeneratorLoss(nn.Module):
         if C.use_feat_match_loss:
             self.feat_match_loss = MelganFeatureLoss()
 
-    def forward(self, y_hat=None, y=None, scores_fake=None, feats_fake=None, feats_real=None, y_hat_sub=None, y_sub=None):#设为None的好处，若有值则赋予，无值为none
+    def forward(self, y_hat=None, y=None, scores_fake=None, feats_fake=None, feats_real=None, y_hat_sub=None, y_sub=None):
         gen_loss = 0
         adv_loss = 0
         return_dict = {}
 
-        # 多带=子带+全带
+
         # STFT Loss
         if self.use_stft_loss:
             stft_loss_mg, stft_loss_sc = self.stft_loss(y_hat.squeeze(1), y.squeeze(1))
             return_dict['G_stft_loss_mg'] = stft_loss_mg
             return_dict['G_stft_loss_sc'] = stft_loss_sc
-            gen_loss += self.stft_loss_weight * (stft_loss_mg + stft_loss_sc)#stft_loss_weight=0.5
-
+            gen_loss += self.stft_loss_weight * (stft_loss_mg + stft_loss_sc)
         # subband STFT Loss
         if self.use_subband_stft_loss:
             subband_stft_loss_mg, subband_stft_loss_sc = self.subband_stft_loss(y_hat_sub, y_sub)
             return_dict['G_subband_stft_loss_mg'] = subband_stft_loss_mg
             return_dict['G_subband_stft_loss_sc'] = subband_stft_loss_sc
-            gen_loss += self.subband_stft_loss_weight * (subband_stft_loss_mg + subband_stft_loss_sc) #subband_stft_loss_weight": 0.5
+            gen_loss += self.subband_stft_loss_weight * (subband_stft_loss_mg + subband_stft_loss_sc)
 
         # multiscale MSE adversarial loss
         if self.use_mse_gan_loss and scores_fake is not None:
             mse_fake_loss = _apply_G_adv_loss(scores_fake, self.mse_loss)
             return_dict['G_mse_fake_loss'] = mse_fake_loss
-            adv_loss += self.mse_gan_loss_weight * mse_fake_loss #mse_G_loss_weight": 2.5,
+            adv_loss += self.mse_gan_loss_weight * mse_fake_loss
 
         # multiscale Hinge adversarial loss
         if self.use_hinge_gan_loss and not scores_fake is not None:
